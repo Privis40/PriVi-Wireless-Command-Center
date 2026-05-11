@@ -157,7 +157,7 @@ Sends broadcast deauth frames to all clients associated with a specific AP. Requ
 ## Author & Brand
 
 **Prince Ubebe**
-Cybersecurity Analyst | Security Automation Engineer | Founder, PriViSecurity
+Cybersecurity Analyst | Security Automation Engineer
 
 - GitHub: [github.com/Privis40](https://github.com/Privis40)
 - LinkedIn: [linkedin.com/in/prince-ubebe-291573321](https://www.linkedin.com/in/prince-ubebe-291573321)
