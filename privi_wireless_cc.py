@@ -37,13 +37,11 @@ class PDFReporter(FPDF):
         """Removes emojis and non-latin-1 characters to prevent PDF crashes."""
         if not text:
             return ""
-        # Strips out Rich formatting tags and non-ASCII/Latin-1 characters
         text = re.sub(r'\[.*?\]', '', str(text))
         return text.encode('ascii', 'ignore').decode('ascii')
 
     def header(self):
         self.set_font('Helvetica', 'B', 16)
-        # Removed emoji from header to prevent encoding error
         self.cell(0, 10, f'{BRAND} Wireless Audit Report', 0, 1, 'C')
         self.ln(5)
 
@@ -53,13 +51,14 @@ class PDFReporter(FPDF):
         self.cell(0, 10, f'Page {self.page_no()}/{{nb}} - Audit Date: {time.strftime("%Y-%m-%d")}', 0, 0, 'C')
 
     def generate_report(self, scan_data):
+        if not scan_data:
+            return None
         self.alias_nb_pages()
         self.add_page()
         self.set_font('Helvetica', 'B', 14)
         self.cell(0, 10, '1. Executive Summary', 0, 1)
         self.set_font('Helvetica', '', 11)
-        
-        summary = f"This document confirms the wireless audit results conducted by {ANALYST_NAME}. The session focused on spectral surveillance and vulnerability assessment of 802.11 management frames."
+        summary = f"This document confirms the wireless audit results conducted by {ANALYST_NAME}."
         self.multi_cell(0, 7, self.clean_text(summary))
         self.ln(5)
         
@@ -67,7 +66,6 @@ class PDFReporter(FPDF):
         self.cell(0, 10, '2. Spectral Analysis Data', 0, 1)
         self.ln(2)
 
-        # Table Header
         self.set_font('Helvetica', 'B', 10)
         self.set_fill_color(30, 30, 30)
         self.set_text_color(255, 255, 255)
@@ -77,33 +75,16 @@ class PDFReporter(FPDF):
         self.cell(20, 10, 'Signal', 1, 0, 'C', 1)
         self.cell(40, 10, 'Security (MFP)', 1, 1, 'C', 1)
 
-        # Table Body
         self.set_font('Helvetica', '', 9)
         self.set_text_color(0, 0, 0)
         for bssid, info in scan_data.items():
-            # Clean all fields of Unicode/Emojis before adding to PDF
-            safe_bssid = self.clean_text(bssid)
-            safe_ssid = self.clean_text(info[0])
-            safe_ch = self.clean_text(str(info[1]))
-            safe_sig = self.clean_text(str(info[2]))
-            safe_mfp = self.clean_text(info[3])
-            
-            self.cell(45, 10, safe_bssid, 1)
-            self.cell(70, 10, safe_ssid, 1)
-            self.cell(15, 10, safe_ch, 1, 0, 'C')
-            self.cell(20, 10, safe_sig, 1, 0, 'C')
-            self.cell(40, 10, safe_mfp, 1, 1, 'C')
+            self.cell(45, 10, self.clean_text(bssid), 1)
+            self.cell(70, 10, self.clean_text(info[0]), 1)
+            self.cell(15, 10, self.clean_text(str(info[1])), 1, 0, 'C')
+            self.cell(20, 10, self.clean_text(str(info[2])), 1, 0, 'C')
+            self.cell(40, 10, self.clean_text(info[3]), 1, 1, 'C')
 
-        self.ln(20)
-        self.set_font('Times', 'BI', 15)
-        signature = f"~ Signed: {ANALYST_NAME} ~"
-        self.cell(0, 10, self.clean_text(signature), 0, 1, 'R')
-        
-        self.set_font('Helvetica', 'I', 10)
-        role = f"Lead Cybersecurity Analyst | {BRAND}"
-        self.cell(0, 5, self.clean_text(role), 0, 1, 'R')
-        
-        filename = f"PWCC_Audit_{time.strftime('%Y%m%d')}.pdf"
+        filename = f"PWCC_Audit_{time.strftime('%Y%m%d_%H%M%S')}.pdf"
         self.output(filename)
         return filename
 
@@ -114,25 +95,23 @@ def update_logs(msg):
 def channel_hopper():
     while not stop_threads:
         for ch in range(1, 14):
-            os.system(f"iwconfig {INTERFACE} channel {ch}")
+            try:
+                os.system(f"iwconfig {INTERFACE} channel {ch} > /dev/null 2>&1")
+            except:
+                pass
             time.sleep(0.5)
 
 def packet_callback(pkt):
     if pkt.haslayer(Dot11Beacon):
         bssid = pkt[Dot11].addr2
         ssid = pkt[Dot11Elt].info.decode(errors="ignore") if pkt[Dot11Elt].info else "Hidden"
-        
-        # Evil Twin Detection
-        if ssid == MY_LAB_SSID and bssid != "AA:BB:CC:DD:EE:FF": # Replace with your real MAC
+        if ssid == MY_LAB_SSID and bssid != "AA:BB:CC:DD:EE:FF":
             update_logs(f"[bold red]ALERT: EVIL TWIN DETECTED ({bssid})[/bold red]")
             ssid = f"[bold red]{ssid}[/bold red]"
-
-        # Check for 802.11w (MFP)
         mfp = "Disabled"
         if pkt.haslayer(Dot11EltRSN):
             cap = pkt[Dot11EltRSN].cap
             if cap & 0x40 or cap & 0x80: mfp = "[bold green]Protected[/bold green]"
-
         networks[bssid] = [ssid, pkt[Dot11Beacon].network_stats().get("channel"), pkt.dBm_AntSignal, mfp]
 
     if pkt.haslayer(EAPOL):
@@ -144,24 +123,25 @@ def main():
         console.print("[bold red]ERROR: PWCC requires root privileges.[/bold red]")
         sys.exit()
 
-    os.system('clear')
-    console.print(Panel.fit("[bold green]🛰️ PRIVI-WIRELESS COMMAND CENTER v3.0[/bold green]", border_style="green"))
-    
-    print("\n[1] SURVEILLANCE (Passive Recon)\n[2] INTERDICTION (Targeted Deauth)\n[3] BROADCAST SHUTDOWN (Massive Deauth)\n[4] DATA EXTRACTION (Handshake Hunt)")
-    
-    protocol = IntPrompt.ask("\nSelect Operational Protocol", choices=["1", "2", "3", "4"])
-
-    threading.Thread(target=channel_hopper, daemon=True).start()
-    
-    layout = Layout()
-    layout.split_column(Layout(name="top", size=3), Layout(name="mid", size=15), Layout(name="bot", size=12))
-    layout["top"].update(Panel(f"ANALYST: {ANALYST_NAME} | INTERFACE: {INTERFACE}", style="bold green"))
-
-    update_logs(f"Protocol {protocol} Active. Initializing RF Engine...")
-
     try:
+        os.system('clear')
+        console.print(Panel.fit("[bold green]🛰️ PRIVI-WIRELESS COMMAND CENTER v3.0[/bold green]", border_style="green"))
+        
+        print("\n[1] SURVEILLANCE (Passive Recon)\n[2] INTERDICTION (Targeted Deauth)\n[3] BROADCAST SHUTDOWN (Massive Deauth)\n[4] DATA EXTRACTION (Handshake Hunt)")
+        
+        # Menu is now inside the 'try' block to catch Ctrl+C
+        protocol = IntPrompt.ask("\nSelect Operational Protocol", choices=["1", "2", "3", "4"])
+
+        threading.Thread(target=channel_hopper, daemon=True).start()
+        
+        layout = Layout()
+        layout.split_column(Layout(name="top", size=3), Layout(name="mid", size=15), Layout(name="bot", size=12))
+        layout["top"].update(Panel(f"ANALYST: {ANALYST_NAME} | INTERFACE: {INTERFACE}", style="bold green"))
+
+        update_logs(f"Protocol {protocol} Active. Initializing RF Engine...")
+
         with Live(layout, refresh_per_second=2):
-            sniff_thread = threading.Thread(target=lambda: sniff(iface=INTERFACE, prn=packet_callback, store=0))
+            sniff_thread = threading.Thread(target=lambda: sniff(iface=INTERFACE, prn=packet_callback, store=0), daemon=True)
             sniff_thread.start()
             while True:
                 table = RichTable(title="RF Spectrum Analysis", expand=True)
@@ -175,14 +155,21 @@ def main():
                 layout["mid"].update(table)
                 layout["bot"].update(Panel("\n".join(log_messages), title="Intelligence Stream", border_style="green"))
                 time.sleep(1)
+
     except KeyboardInterrupt:
         global stop_threads
         stop_threads = True
-        console.print("\n[bold yellow]Session Interrupted. Generating Forensic Documentation...[/bold yellow]")
+        console.print("\n[bold yellow]! Session Terminated by User.[/bold yellow]")
         
-        reporter = PDFReporter()
-        fname = reporter.generate_report(networks)
-        console.print(f"[bold green]Report Signed & Saved: {fname}[/bold green]")
+        if networks:
+            console.print("[bold cyan]Generating Forensic Documentation...[/bold cyan]")
+            reporter = PDFReporter()
+            fname = reporter.generate_report(networks)
+            if fname:
+                console.print(f"[bold green]Report Signed & Saved: {fname}[/bold green]")
+        else:
+            console.print("[bold white]No data captured. Skipping report generation.[/bold white]")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
