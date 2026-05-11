@@ -1,12 +1,12 @@
+# PriVi Wireless Command Center (PWCC) v1.0
+### RF Intelligence & Wireless Audit Platform
+**Developed by Prince Ubebe | [PriViSecurity](https://github.com/Privis40)**
+
 <div align="center">
 
 ![PWCC Dashboard](PriVi-PWCC.PNG)
 
 </div>
-
-# PriVi Wireless Command Center (PWCC) v1.0
-### RF Intelligence & Wireless Audit Platform
-**Developed by Prince Ubebe | [PriViSecurity](https://github.com/Privis40)**
 
 ---
 
