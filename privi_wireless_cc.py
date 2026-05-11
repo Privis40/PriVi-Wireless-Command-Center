@@ -10,6 +10,7 @@ import threading
 import time
 import os
 import sys
+import re
 from rich.console import Console
 from rich.table import Table as RichTable
 from rich.live import Live
@@ -32,9 +33,18 @@ stop_threads = False
 captured_handshakes = []
 
 class PDFReporter(FPDF):
+    def clean_text(self, text):
+        """Removes emojis and non-latin-1 characters to prevent PDF crashes."""
+        if not text:
+            return ""
+        # Strips out Rich formatting tags and non-ASCII/Latin-1 characters
+        text = re.sub(r'\[.*?\]', '', str(text))
+        return text.encode('ascii', 'ignore').decode('ascii')
+
     def header(self):
         self.set_font('Helvetica', 'B', 16)
-        self.cell(0, 10, f'🛡️ {BRAND} Wireless Audit Report', 0, 1, 'C')
+        # Removed emoji from header to prevent encoding error
+        self.cell(0, 10, f'{BRAND} Wireless Audit Report', 0, 1, 'C')
         self.ln(5)
 
     def footer(self):
@@ -48,7 +58,9 @@ class PDFReporter(FPDF):
         self.set_font('Helvetica', 'B', 14)
         self.cell(0, 10, '1. Executive Summary', 0, 1)
         self.set_font('Helvetica', '', 11)
-        self.multi_cell(0, 7, f"This document confirms the wireless audit results conducted by {ANALYST_NAME}. The session focused on spectral surveillance and vulnerability assessment of 802.11 management frames.")
+        
+        summary = f"This document confirms the wireless audit results conducted by {ANALYST_NAME}. The session focused on spectral surveillance and vulnerability assessment of 802.11 management frames."
+        self.multi_cell(0, 7, self.clean_text(summary))
         self.ln(5)
         
         self.set_font('Helvetica', 'B', 14)
@@ -69,19 +81,27 @@ class PDFReporter(FPDF):
         self.set_font('Helvetica', '', 9)
         self.set_text_color(0, 0, 0)
         for bssid, info in scan_data.items():
-            ssid = info[0].replace("[bold red]", "").replace("[/bold red]", "")
-            mfp = info[3].replace("[bold green]", "").replace("[/bold green]", "")
-            self.cell(45, 10, bssid, 1)
-            self.cell(70, 10, ssid, 1)
-            self.cell(15, 10, str(info[1]), 1, 0, 'C')
-            self.cell(20, 10, str(info[2]), 1, 0, 'C')
-            self.cell(40, 10, mfp, 1, 1, 'C')
+            # Clean all fields of Unicode/Emojis before adding to PDF
+            safe_bssid = self.clean_text(bssid)
+            safe_ssid = self.clean_text(info[0])
+            safe_ch = self.clean_text(str(info[1]))
+            safe_sig = self.clean_text(str(info[2]))
+            safe_mfp = self.clean_text(info[3])
+            
+            self.cell(45, 10, safe_bssid, 1)
+            self.cell(70, 10, safe_ssid, 1)
+            self.cell(15, 10, safe_ch, 1, 0, 'C')
+            self.cell(20, 10, safe_sig, 1, 0, 'C')
+            self.cell(40, 10, safe_mfp, 1, 1, 'C')
 
         self.ln(20)
         self.set_font('Times', 'BI', 15)
-        self.cell(0, 10, f'~ Signed: {ANALYST_NAME} ~', 0, 1, 'R')
+        signature = f"~ Signed: {ANALYST_NAME} ~"
+        self.cell(0, 10, self.clean_text(signature), 0, 1, 'R')
+        
         self.set_font('Helvetica', 'I', 10)
-        self.cell(0, 5, f'Lead Cybersecurity Analyst | {BRAND}', 0, 1, 'R')
+        role = f"Lead Cybersecurity Analyst | {BRAND}"
+        self.cell(0, 5, self.clean_text(role), 0, 1, 'R')
         
         filename = f"PWCC_Audit_{time.strftime('%Y%m%d')}.pdf"
         self.output(filename)
@@ -128,7 +148,8 @@ def main():
     console.print(Panel.fit("[bold green]🛰️ PRIVI-WIRELESS COMMAND CENTER v3.0[/bold green]", border_style="green"))
     
     print("\n[1] SURVEILLANCE (Passive Recon)\n[2] INTERDICTION (Targeted Deauth)\n[3] BROADCAST SHUTDOWN (Massive Deauth)\n[4] DATA EXTRACTION (Handshake Hunt)")
-    protocol = IntPrompt.ask("\nSelect Operational Protocol", choices=[1, 2, 3, 4])
+    
+    protocol = IntPrompt.ask("\nSelect Operational Protocol", choices=["1", "2", "3", "4"])
 
     threading.Thread(target=channel_hopper, daemon=True).start()
     
@@ -149,7 +170,8 @@ def main():
                 table.add_column("CH", style="green")
                 table.add_column("SIG", style="magenta")
                 table.add_column("802.11w", style="cyan")
-                for b, i in networks.items(): table.add_row(b, i[0], str(i[1]), str(i[2]), i[3])
+                for b, i in networks.items(): 
+                    table.add_row(b, i[0], str(i[1]), str(i[2]), i[3])
                 layout["mid"].update(table)
                 layout["bot"].update(Panel("\n".join(log_messages), title="Intelligence Stream", border_style="green"))
                 time.sleep(1)
@@ -164,4 +186,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-      
