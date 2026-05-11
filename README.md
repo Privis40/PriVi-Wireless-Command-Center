@@ -1,4 +1,14 @@
-# 🛰️ PriVi-Wireless Command Center (PWCC)
+<div align="center">
+
+# 🛡️ PriVi-Wireless Command Center (PWCC)
+**Version 1.0 — Developed by: PriViSecurity**
+
+![P_W_C_C Dashboard](PriVi-PWCC.PNG)
+
+</div>
+
+
+# 🛡️ PriVi-Wireless Command Center (PWCC)
 **Centralized RF Intelligence & Professional Audit Platform**
 
 ### 📝 Short Description
